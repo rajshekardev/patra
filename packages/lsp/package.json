@@ -1,6 +1,6 @@
 {
   "name": "patra-lsp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Language server that routes Patra blocks to their language servers",
   "type": "module",
   "bin": {
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rajshekardev/patra.git",
+    "url": "git+https://github.com/rajshekardev/patra.git",
     "directory": "packages/lsp"
   },
   "license": "MIT",
@@ -16,8 +16,17 @@
     "name": "Raj Shekar S",
     "url": "https://github.com/rajshekardev"
   },
-  "keywords": ["patra", "language-server", "lsp", "odin", "tree-sitter"],
-  "files": ["src/**", "README.md"],
+  "keywords": [
+    "patra",
+    "language-server",
+    "lsp",
+    "odin",
+    "tree-sitter"
+  ],
+  "files": [
+    "src/**",
+    "README.md"
+  ],
   "engines": {
     "node": ">=20"
   },
