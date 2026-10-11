@@ -1,17 +1,17 @@
 {
   "name": "tree-sitter-patra",
   "version": "0.1.0",
-  "description": "Patra treesitter",
+  "description": "Tree-sitter grammar and Node.js binding for Patra files",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tree-sitter/tree-sitter-patra.git"
+    "url": "https://github.com/rajshekardev/patra.git",
+    "directory": "packages/parser"
   },
-  "funding": "",
   "license": "MIT",
   "author": {
     "name": "Raj Shekar S",
-    "url": ""
+    "url": "https://github.com/rajshekardev"
   },
   "main": "bindings/node",
   "types": "bindings/node",
@@ -27,7 +27,7 @@
     "binding.gyp",
     "prebuilds/**",
     "bindings/node/*",
-    "queries/*",
+    "queries/**",
     "src/**",
     "*.wasm"
   ],

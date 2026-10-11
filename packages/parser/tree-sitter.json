@@ -16,16 +16,15 @@
   "metadata": {
     "version": "0.1.0",
     "license": "MIT",
-    "description": "Patra treesitter",
+    "description": "Tree-sitter grammar for Patra files",
     "authors": [
       {
         "name": "Raj Shekar S",
-        "url": ""
+        "url": "https://github.com/rajshekardev"
       }
     ],
     "links": {
-      "repository": "https://github.com/tree-sitter/tree-sitter-patra",
-      "funding": ""
+      "repository": "https://github.com/rajshekardev/patra"
     }
   },
   "bindings": {
