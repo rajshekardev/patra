@@ -1,0 +1,33 @@
+{
+  "name": "patra-lsp",
+  "version": "0.1.0",
+  "description": "Language server that routes Patra blocks to their language servers",
+  "type": "module",
+  "bin": {
+    "patra-lsp": "src/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rajshekardev/patra.git",
+    "directory": "packages/lsp"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Raj Shekar S",
+    "url": "https://github.com/rajshekardev"
+  },
+  "keywords": ["patra", "language-server", "lsp", "odin", "tree-sitter"],
+  "files": ["src/**", "README.md"],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "test": "node --test"
+  }
+}

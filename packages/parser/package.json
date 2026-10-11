@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rajshekardev/patra.git",
+    "url": "git+https://github.com/rajshekardev/patra.git",
     "directory": "packages/parser"
   },
   "license": "MIT",

@@ -1,5 +1,5 @@
 ---
-title: "Patra — Full-Stack Demo"
+title: page_title
 description: "A full-stack application built with Patra."
 lang: "en"
 canonical: "/"
@@ -17,6 +17,8 @@ import "core:fmt"
 import "patra:rpc"
 import "patra:db"
 
+page_title: string = "Patra guestbook"
+
 // Creating Greetings table in db
 // db config is in patra.config.odin
 Greeting :: struct {
@@ -26,6 +28,7 @@ Greeting :: struct {
 	created_at: db.Timestamp `default:"now"`,
 }
 
+msg : string = "ffasd"
 greetings := db.table("greetings", Greeting)
 
 AddInput :: struct {
@@ -34,6 +37,7 @@ AddInput :: struct {
 
 
 list_greetings :: proc(ctx: ^rpc.Context) -> []schema.Greeting {
+	fmt.println(msg)
 	return db.select(
 		ctx.db,
 		schema.greetings,
@@ -75,10 +79,17 @@ add_greetings :: proc(name: string) {
 set_form_error :: proc(msg: string) {
 	form_error = msg 
 }
+
+// CSS-visible client state is explicitly opted in.
+// @patra css --accent
+accent: string = "#38bdf8"
 </odin>
 
 <script lang="ts">
 import { Effect } from "effect"
+
+// @patra css
+const focusRing = "#7dd3fc"
 
 const clean = (raw: string) => Effect.succeed(raw).pipe(
 	Effect.map((s) => s.trim()),
@@ -104,7 +115,7 @@ export function onSubmit(e: SubmitEvent) {
 </script>
 
 <main class="mx-auto max-w-md p-8 flex flex-col gap-6">
-	<h1 class="text-3xl font-bold">Patra guestbook</h1>
+	<h1 class="text-3xl font-bold">{page_title}</h1>
 
 	<form onsubmit={onSubmit} class="flex gap-2">
 		<input
@@ -144,6 +155,9 @@ export function onSubmit(e: SubmitEvent) {
 </main>
 
 <style>
+	button { color: var(--accent); }
+	input:focus { outline-color: var(--focus-ring); }
+
 	:global(body) {
 		background: black;
 		color: white;
