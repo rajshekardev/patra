@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
-import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node";
+import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node.js";
 import {
   createConnection,
   ProposedFeatures,
   TextDocumentSyncKind,
   TextDocument,
-} from "vscode-languageserver/node";
+} from "vscode-languageserver/node.js";
 import { appendSharedDeclarations, extractRpcRoutes, extractSharedSymbols, findYamlSlashComments, maskOutside, parsePatra, visibleSharedSymbols } from "./blocks.js";
 
 const connection = createConnection(ProposedFeatures.all);

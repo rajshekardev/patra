@@ -1,6 +1,6 @@
 {
   "name": "patra-lsp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Language server that routes Patra blocks to their language servers",
   "type": "module",
   "bin": {
