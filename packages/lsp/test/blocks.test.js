@@ -47,6 +47,9 @@ test("enforces server type-only access and annotated CSS exports", () => {
   const scriptText = appendSharedDeclarations("typescript", source.slice(script.start, script.end), visibleSharedSymbols("script", symbols), rpcRoutes);
   assert.match(scriptText, /const rpc: .*mutation: \(id: number\) => Promise<Secret>/);
   assert.doesNotMatch(scriptText, /secretValue/);
+  const jsText = appendSharedDeclarations("javascript", "", visibleSharedSymbols("script", symbols), rpcRoutes);
+  assert.match(jsText, /var rpc;/);
+  assert.match(jsText, /mutation: function\(number\): Promise<Secret>/);
 });
 
 test("collects Odin and script exports plus HTML selectors for downstream blocks", () => {

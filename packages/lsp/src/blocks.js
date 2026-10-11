@@ -257,7 +257,7 @@ export function visibleSharedSymbols(regionKind, symbols) {
 
 export function appendSharedDeclarations(language, source, symbols, rpcRoutes = []) {
   const types = symbols.filter(item => item.kind === "type");
-  if (!types.length && !(language === "typescript" && rpcRoutes.length)) return source;
+  if (!types.length && !(["typescript", "javascript"].includes(language) && rpcRoutes.length)) return source;
   const separator = source.endsWith("\n") ? "\n" : "\n\n";
   if (language === "odin") {
     return source + separator + "// Patra shared type declarations\n" + types.map(item => item.odinStub).join("\n") + "\n";
@@ -276,7 +276,22 @@ export function appendSharedDeclarations(language, source, symbols, rpcRoutes = 
   }
   if (language === "javascript") {
     const declarations = types.map(item => `/** @typedef {${item.tsType ?? "unknown"}} ${item.name} */`).join("\n");
-    return `${source}${separator}${declarations}\n`;
+    const rpcTree = {};
+    for (const route of rpcRoutes) {
+      let node = rpcTree;
+      for (const part of route.path) node = node[part] ??= {};
+      node[route.operation] = `(${route.params.map(param => `${param.name}: ${param.type}`).join(", ")}) => Promise<${route.result}>`;
+    }
+    const render = node => `{ ${Object.entries(node).map(([name, value]) => {
+      if (typeof value !== "string") return `${name}: ${render(value)}`;
+      const signature = value.match(/^\((.*?)\) => Promise<(.+)>$/);
+      const jsParams = signature?.[1].split(", ").filter(Boolean).map(param => param.split(": ").at(-1)).join(", ");
+      const functionType = signature ? `function(${jsParams}): Promise<${signature[2]}>` : "Function";
+      return `${name}: ${functionType}`;
+    }).join(", ")} }`;
+    const hasRpcBinding = /\b(?:import\s+.*\brpc\b|(?:const|let|var|function|class)\s+rpc\b)/.test(source);
+    const rpc = rpcRoutes.length && !hasRpcBinding ? `/** @type {${render(rpcTree)}} */\nvar rpc;\n` : "";
+    return `${source}${separator}${declarations}\n${rpc}`;
   }
   return source;
 }

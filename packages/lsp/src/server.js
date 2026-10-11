@@ -300,6 +300,16 @@ function findSharedSymbol(state, region, offset) {
   return visible.find(item => item.name === name || (region.kind === "style" && item.cssName === `--${name}`)) ?? null;
 }
 
+function findRpcRouteAt(state, region, offset) {
+  if (!["client", "script"].includes(region.kind)) return null;
+  const before = state.text.slice(region.start, offset);
+  const after = state.text.slice(offset);
+  const left = before.match(/\brpc(?:\.[A-Za-z_$][\w$]*)*$/)?.[0] ?? "";
+  const right = after.match(/^(?:\.[A-Za-z_$][\w$]*)*/)?.[0] ?? "";
+  const path = `${left}${right}`.replace(/^rpc\.?/, "").replace(/\.(?:query|mutation)$/, "").split(".").filter(Boolean).join(".");
+  return state.rpcRoutes.find(route => route.path.join(".") === path) ?? null;
+}
+
 function addSymbolCompletions(result, state, region) {
   const items = visibleSymbols(region, state.symbols).map(symbol => ({
     label: region.kind === "style" && symbol.kind === "html-class" ? `.${symbol.name}`
@@ -320,13 +330,14 @@ function addRpcCompletions(result, state, region, offset) {
   const context = before.match(/\brpc((?:\.[A-Za-z_$][\w$]*)*)\.?$/);
   if (!context) return result;
   const parts = context[1].split(".").filter(Boolean);
-  const candidates = new Set();
+  const candidates = new Map();
   for (const route of state.rpcRoutes) {
     if (!parts.every((part, index) => route.path[index] === part)) continue;
-    if (parts.length < route.path.length) candidates.add(route.path[parts.length]);
-    else candidates.add(`${route.operation}()`);
+    const signature = `(${route.params.map(param => `${param.name}: ${param.type}`).join(", ")}) => Promise<${route.result}>`;
+    if (parts.length < route.path.length) candidates.set(route.path[parts.length], `RPC route ${route.path.join(".")}`);
+    else candidates.set(`${route.operation}()`, signature);
   }
-  const items = [...candidates].map(label => ({ label, kind: 2, detail: "Patra RPC endpoint" }));
+  const items = [...candidates].map(([label, detail]) => ({ label, kind: 2, detail }));
   if (Array.isArray(result)) return [...result, ...items];
   const list = result ?? { isIncomplete: false, items: [] };
   return { ...list, items: [...(list.items ?? []), ...items] };
@@ -346,6 +357,16 @@ for (const method of forwardedRequests) {
     if (!routed) return method === "textDocument/completion" ? { isIncomplete: false, items: [] } : null;
 
     const symbol = findSharedSymbol(routed.state, routed.region, routed.offset);
+    const rpcRoute = method === "textDocument/definition" ? findRpcRouteAt(routed.state, routed.region, routed.offset) : null;
+    if (rpcRoute) {
+      return {
+        uri: routed.state.uri,
+        range: {
+          start: routed.state.document.positionAt(rpcRoute.start),
+          end: routed.state.document.positionAt(rpcRoute.end),
+        },
+      };
+    }
     if (method === "textDocument/definition" && symbol) {
       return {
         uri: routed.state.uri,
