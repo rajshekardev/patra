@@ -6,7 +6,7 @@ import {
   TextDocumentSyncKind,
   TextDocument,
 } from "vscode-languageserver/node.js";
-import { appendSharedDeclarations, extractRpcRoutes, extractSharedSymbols, findYamlSlashComments, maskOutside, parsePatra, visibleSharedSymbols } from "./blocks.js";
+import { appendSharedDeclarations, extractRpcRoutes, extractSharedSymbols, findYamlSlashComments, parsePatra, visibleSharedSymbols } from "./blocks.js";
 
 const connection = createConnection(ProposedFeatures.all);
 const states = new Map();
@@ -41,24 +41,65 @@ function languageId(language) {
 
 function makeVirtualUri(hostUri, region, index) {
   const url = new URL(hostUri);
-  url.pathname += `.patra-${index}.${extension[region.language]}`;
+  const slash = url.pathname.lastIndexOf("/");
+  const directory = url.pathname.slice(0, slash + 1);
+  const hostName = url.pathname.slice(slash + 1);
+  url.pathname = `${directory}.patra-lsp/${hostName}/${index}/source.${extension[region.language]}`;
   url.search = "";
   url.hash = "";
   return url.toString();
 }
 
-function mapVirtualResult(value) {
-  if (Array.isArray(value)) return value.map(mapVirtualResult);
+function mapPositionToHost(position, virtual) {
+  if (!position || !virtual) return null;
+  const offset = virtual.document.offsetAt(position) - virtual.prefixLength;
+  if (offset < 0 || offset > virtual.region.end - virtual.region.start) return null;
+  return virtual.hostDocument.positionAt(virtual.region.start + offset);
+}
+
+function mapRangeToHost(range, virtual) {
+  if (!range?.start || !range?.end) return null;
+  const start = mapPositionToHost(range.start, virtual);
+  const end = mapPositionToHost(range.end, virtual);
+  return start && end ? { ...range, start, end } : null;
+}
+
+function mapPositionToVirtual(position, virtual) {
+  const offset = virtual.hostDocument.offsetAt(position) - virtual.region.start;
+  return virtual.document.positionAt(virtual.prefixLength + offset);
+}
+
+function mapRangeToVirtual(range, virtual) {
+  if (!range?.start || !range?.end) return range;
+  return {
+    ...range,
+    start: mapPositionToVirtual(range.start, virtual),
+    end: mapPositionToVirtual(range.end, virtual),
+  };
+}
+
+function mapVirtualResult(value, sourceVirtual) {
+  if (Array.isArray(value)) return value.map(item => mapVirtualResult(item, sourceVirtual));
   if (!value || typeof value !== "object") return value;
   const mapped = { ...value };
-  if (typeof mapped.uri === "string" && virtualDocuments.has(mapped.uri)) {
-    mapped.uri = virtualDocuments.get(mapped.uri).hostUri;
-  }
-  if (typeof mapped.targetUri === "string" && virtualDocuments.has(mapped.targetUri)) {
-    mapped.targetUri = virtualDocuments.get(mapped.targetUri).hostUri;
+  let virtual = sourceVirtual;
+  for (const key of ["uri", "targetUri"]) {
+    if (typeof mapped[key] !== "string") continue;
+    const target = virtualDocuments.get(mapped[key]);
+    if (target) {
+      virtual = target;
+      mapped[key] = target.hostUri;
+    } else if (mapped[key].startsWith("file:")) {
+      virtual = null;
+    }
   }
   for (const [key, child] of Object.entries(mapped)) {
-    if (child && typeof child === "object") mapped[key] = mapVirtualResult(child);
+    if (!child || typeof child !== "object") continue;
+    if (["range", "targetRange", "selectionRange", "originSelectionRange", "replace", "insert"].includes(key)) {
+      mapped[key] = mapRangeToHost(child, virtual) ?? child;
+    } else {
+      mapped[key] = mapVirtualResult(child, virtual);
+    }
   }
   return mapped;
 }
@@ -68,12 +109,12 @@ function sendDiagnostics(hostUri) {
   if (!state) return;
   const diagnostics = [];
   for (const region of state.virtuals) {
+    const virtual = virtualDocuments.get(region.uri);
+    if (!virtual) continue;
     const childDiagnostics = state.diagnostics.get(region.uri) ?? [];
     for (const diagnostic of childDiagnostics) {
-      const offset = state.document.offsetAt(diagnostic.range.start);
-      if (offset >= region.start && offset <= region.end) {
-        diagnostics.push({ ...diagnostic, source: diagnostic.source ?? `patra:${region.language}` });
-      }
+      const range = mapRangeToHost(diagnostic.range, virtual);
+      if (range) diagnostics.push({ ...diagnostic, range, source: diagnostic.source ?? `patra:${region.language}` });
     }
   }
   for (const range of findYamlSlashComments(state.text, state.virtuals)) {
@@ -134,7 +175,7 @@ async function getChild(language) {
     childConnection.listen();
     childConnection.sendRequest("initialize", {
       processId: initializeParams?.processId ?? null,
-      clientInfo: { name: "patra-lsp", version: "0.1.0" },
+      clientInfo: { name: "patra-lsp", version: "0.1.3" },
       rootUri: initializeParams?.rootUri ?? null,
       rootPath: initializeParams?.rootPath ?? null,
       workspaceFolders: initializeParams?.workspaceFolders ?? null,
@@ -159,16 +200,17 @@ function visibleSymbols(region, symbols) {
   return visibleSharedSymbols(region.kind, symbols);
 }
 
-function virtualText(source, region, symbols, rpcRoutes) {
-  let projected = maskOutside(source, region.start, region.end);
+function virtualText(region, symbols, rpcRoutes) {
+  let projected = region.text;
   const visible = visibleSymbols(region, symbols);
+  const prefix = region.language === "odin" ? "package patra\n" : "";
   if (region.kind === "client") projected = appendSharedDeclarations("odin", projected, visible);
   if (region.kind === "script") projected = appendSharedDeclarations(region.language, projected, visible, rpcRoutes);
   if (region.kind === "style") {
     const cssProperties = visible.filter(symbol => symbol.cssExport && symbol.cssName).map(symbol => `  ${symbol.cssName}: initial;`);
     if (cssProperties.length) projected += `\n\n:root {\n${cssProperties.join("\n")}\n}\n`;
   }
-  return projected;
+  return prefix + projected;
 }
 
 async function closeVirtual(state, region) {
@@ -184,20 +226,24 @@ async function closeVirtual(state, region) {
 }
 
 async function openVirtual(state, region) {
+  const prefixLength = region.language === "odin" ? "package patra\n".length : 0;
+  const document = TextDocument.create(region.uri, languageId(region.language), state.version, region.text);
+  const virtual = { hostUri: state.uri, region, hostDocument: state.document, document, prefixLength };
+  virtualDocuments.set(region.uri, virtual);
+  state.diagnostics.set(region.uri, []);
   try {
     const child = await getChild(region.language);
-    virtualDocuments.set(region.uri, { hostUri: state.uri, region });
-    state.diagnostics.set(region.uri, []);
     child.connection.sendNotification("textDocument/didOpen", {
       textDocument: {
         uri: region.uri,
         languageId: languageId(region.language),
         version: state.version,
-        text: region.text,
+        text: document.getText(),
       },
     });
     child.open.add(region.uri);
   } catch (error) {
+    virtualDocuments.delete(region.uri);
     connection.console.warn(error.message);
   }
 }
@@ -213,10 +259,11 @@ async function updateDocument(uri, text, version, opening = false) {
   const state = { uri, text, version, document, symbols, rpcRoutes, diagnostics: new Map(), virtuals: [] };
   regions.forEach((region, index) => {
     region.uri = makeVirtualUri(uri, region, index);
-    region.text = virtualText(text, region, symbols, rpcRoutes);
+    region.text = virtualText({ ...region, text: text.slice(region.start, region.end) }, symbols, rpcRoutes);
     state.virtuals.push(region);
   });
   states.set(uri, state);
+  sendDiagnostics(uri);
   await Promise.all(state.virtuals.map(region => openVirtual(state, region)));
   sendDiagnostics(uri);
 }
@@ -240,7 +287,7 @@ connection.onInitialize(params => {
       documentFormattingProvider: true,
       documentRangeFormattingProvider: true,
     },
-    serverInfo: { name: "patra-lsp", version: "0.1.0" },
+    serverInfo: { name: "patra-lsp", version: "0.1.3" },
   };
 });
 
@@ -381,11 +428,14 @@ for (const method of forwardedRequests) {
     const childPromise = children.get(serverKey(routed.region.language));
     if (childPromise) {
       try {
+        const virtual = virtualDocuments.get(routed.region.uri);
         const child = await childPromise;
         const forwarded = structuredClone(params);
         forwarded.textDocument.uri = routed.region.uri;
+        if (forwarded.position) forwarded.position = mapPositionToVirtual(forwarded.position, virtual);
+        if (forwarded.range) forwarded.range = mapRangeToVirtual(forwarded.range, virtual);
         result = await child.connection.sendRequest(method, forwarded);
-        result = mapVirtualResult(result);
+        result = mapVirtualResult(result, virtual);
       } catch { }
     }
     if (method === "textDocument/completion" && visibleSymbols(routed.region, routed.state.symbols).length) {

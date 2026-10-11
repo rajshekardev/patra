@@ -1,6 +1,6 @@
 # patra-lsp
 
-`patra-lsp` is an experimental language server for `.patra` files. It splits a Patra document into language regions, sends each region to its language server, and maps diagnostics and language features back to the original file.
+`patra-lsp` is an experimental language server for `.patra` files. It sends each block body to its language server as a separate virtual document, then maps diagnostics and language features back to the original file. Odin blocks receive a synthetic `package patra` line for OLS; it is not added to the `.patra` source.
 
 ## Supported blocks
 
@@ -57,13 +57,13 @@ Override executable names with `PATRA_OLS`, `PATRA_YAML_LSP`, `PATRA_HTML_LSP`, 
 
 ```lua
 vim.lsp.config("patra", {
-  cmd = { "patra-lsp" },
+  cmd = { "patra-lsp", "--stdio" },
   filetypes = { "patra" },
 })
 vim.lsp.enable("patra")
 ```
 
-The repository's Neovim module will install/update the package when a `.patra` file is opened and enables this client automatically.
+The repository's Neovim module enables this client automatically. Use `<leader>pt` to open its MiniPick controls and update the package.
 
 ## Development
 
