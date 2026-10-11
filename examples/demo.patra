@@ -1,0 +1,151 @@
+---
+title: "Patra — Full-Stack Demo"
+description: "A full-stack application built with Patra."
+lang: "en"
+canonical: "/"
+robots: "index, follow"
+
+# Rendering settings are valid YAML and can be read by the Patra compiler.
+# Use this in the root layout to make the settings global.
+rendering:
+  ssr: true
+  prerender: true
+---
+
+<odin server>
+import "core:fmt"
+import "patra:rpc"
+import "patra:db"
+
+// Creating Greetings table in db
+// db config is in patra.config.odin
+Greeting :: struct {
+	id:         db.Serial    `pk`,
+	name:       string       `not_null max:"40"`,
+	message:    string       `not_null`,
+	created_at: db.Timestamp `default:"now"`,
+}
+
+greetings := db.table("greetings", Greeting)
+
+AddInput :: struct {
+	name: string `min:"1" max:"40"`
+} // validation
+
+
+list_greetings :: proc(ctx: ^rpc.Context) -> []schema.Greeting {
+	return db.select(
+		ctx.db,
+		schema.greetings,
+		order_by = db.desc(schema.greetings.created_at),
+		limit = 20,
+	)
+}
+
+add_greetings :: proc(ctx: ^rpc.Context, input: AddInput) -> []schema.Greeting {
+	row := schema.Greeting{
+			name = input.name,
+			message = fmt.aprintf("Hello, from %s!", input.name),
+		}
+	return db.insert(ctx.db, schema.greetings, row) // returns the entry
+}
+
+rpc.demo.greet.list(list_greetings) // attach functions to rpc + namespace + functions
+rpc.demo.greet(add_greetings) // arbitrary namespace based api tree structure.
+
+// http://localhost:3000/api/demo/greet/list/
+// http://localhost:3000/api/demo/add_greetings/
+// compiler will throw error for namespace conflicts
+
+</odin>
+
+<odin client>
+import "patra:rpc"
+import "patra:query"
+
+greeting := rpc.demo.greet.list.query() // lists all
+greet := rpc.demo.greet.mutation(invalidates = greeting)
+
+// all named stuff below becomes available in script tag with @patra.add_greetings syntax
+add_greetings :: proc(name: string) {
+	form_error = ""
+	add.mutate({name = name})
+}
+
+set_form_error :: proc(msg: string) {
+	form_error = msg 
+}
+</odin>
+
+<script lang="ts">
+import { Effect } from "effect"
+
+const clean = (raw: string) => Effect.succeed(raw).pipe(
+	Effect.map((s) => s.trim()),
+	Effect.filterOrFail(
+		(s) => s.length > 0 && s.length <= 40,
+		() => "Name must be 1-40 characters",
+	)
+)
+
+export function onSubmit(e: SubmitEvent) {
+	e.preventDefault()
+	const form = e.currentTarget as HTMLFormElement
+	const raw = String(new FormData(form).get("name") ?? "")
+
+	Effect.runPromise(
+		clean(raw).pipe(
+			Effect.tap((name) => Effect.sync(() => @patra.add_greetings(name))),
+			Effect.tap(() => Effect.sync(() => form.reset())),
+			Effect.CatchAll((msg) => Effect.sync(() => @patra.set_form_error(msg))),
+		),
+	)
+}
+</script>
+
+<main class="mx-auto max-w-md p-8 flex flex-col gap-6">
+	<h1 class="text-3xl font-bold">Patra guestbook</h1>
+
+	<form onsubmit={onSubmit} class="flex gap-2">
+		<input
+			name="name"
+			placeholder="Your name"
+			class="flex-1 rounded bg-white/10 px-3 py-2 outline-none focus:ring-2 ring-sky-400"
+		/>
+		<button
+			disabled={add.is_pending}
+			class="rounded bg-sky-500 px-4 py-2 font-medium disabled:opacity-50"
+		>
+			{#if add.is_pending}Saving...{:else}Greet{/if}
+		</button>
+	</form>
+
+	{#if form_error != ""}
+		<p class="text-red-400">{form_error}</p>
+	{/if}
+
+	{#if add.is_error}
+		<p class="text-red-400">Could not save: {add.error.message}</p>
+	{/if}
+
+	{#if greetings.is_loading}
+		<p>Loading...</p>
+	{:else if greetings.is_error}
+		<p class="text-red-400">Error fetching greetings</p>
+	{:else}
+		<ul class="flex flex-col gap-2 text-xl">
+			{#each greetings.data as g (g.id)}
+				<li class="rounded bg-white/5 px-3 py-2">{g.message}</li>
+			{:else}
+				<li class="opacity-60">No greetings yet. Be the first!</li>
+			{/each}
+		</ul>
+	{/if}
+</main>
+
+<style>
+	:global(body) {
+		background: black;
+		color: white;
+	}
+</style>

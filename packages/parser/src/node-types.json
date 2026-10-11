@@ -1,0 +1,215 @@
+[
+  {
+    "type": "client_block",
+    "named": true,
+    "fields": {
+      "content": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "odin_content",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "css_content",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "document_text",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "frontmatter",
+    "named": true,
+    "fields": {
+      "content": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "yaml_content",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "odin_content",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "script_block",
+    "named": true,
+    "fields": {
+      "attributes": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "tag_attributes",
+            "named": true
+          }
+        ]
+      },
+      "content": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "script_content",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "script_content",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "server_block",
+    "named": true,
+    "fields": {
+      "content": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "odin_content",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "source_file",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "client_block",
+          "named": true
+        },
+        {
+          "type": "document_text",
+          "named": true
+        },
+        {
+          "type": "frontmatter",
+          "named": true
+        },
+        {
+          "type": "script_block",
+          "named": true
+        },
+        {
+          "type": "server_block",
+          "named": true
+        },
+        {
+          "type": "style_block",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "style_block",
+    "named": true,
+    "fields": {
+      "attributes": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "tag_attributes",
+            "named": true
+          }
+        ]
+      },
+      "content": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "css_content",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
+    "type": "yaml_content",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "\n---",
+    "named": false
+  },
+  {
+    "type": "\r\n---",
+    "named": false
+  },
+  {
+    "type": "---\n",
+    "named": false
+  },
+  {
+    "type": "---\r\n",
+    "named": false
+  },
+  {
+    "type": "</odin>",
+    "named": false
+  },
+  {
+    "type": "</script>",
+    "named": false
+  },
+  {
+    "type": "</style>",
+    "named": false
+  },
+  {
+    "type": "<odin client>",
+    "named": false
+  },
+  {
+    "type": "<odin server>",
+    "named": false
+  },
+  {
+    "type": "<script",
+    "named": false
+  },
+  {
+    "type": "<style",
+    "named": false
+  },
+  {
+    "type": ">",
+    "named": false
+  },
+  {
+    "type": "tag_attributes",
+    "named": true
+  }
+]

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "patra",
+      "camelcase": "Patra",
+      "title": "Patra",
+      "scope": "source.patra",
+      "file-types": [
+        "patra"
+      ],
+      "injection-regex": "^patra$",
+      "class-name": "TreeSitterPatra"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Patra treesitter",
+    "authors": [
+      {
+        "name": "Raj Shekar S",
+        "url": ""
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/tree-sitter/tree-sitter-patra",
+      "funding": ""
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": false,
+    "java": false,
+    "node": true,
+    "python": false,
+    "rust": false,
+    "swift": false,
+    "zig": true
+  }
+}
