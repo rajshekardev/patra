@@ -1,0 +1,23 @@
+---
+title: "Patra.Page demo"
+---
+
+<odin client>
+greetings: string = "hello from odin"
+</odin>
+
+<script>
+const test = "demo"
+</script>
+
+<main>
+	<h1>Welcome to Patra</h1>
+	<p>Your project is ready. {greetings}</p>
+	{test}
+</main>
+
+<style>
+	main {
+		padding: 12px;
+	}
+</style>

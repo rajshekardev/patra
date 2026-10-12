@@ -1,0 +1,1 @@
+{"name":"demo","runtime":"Bun","mode":"Serverless","routes":[{"path":"/"}]}
