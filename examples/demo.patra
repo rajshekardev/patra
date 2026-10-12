@@ -1,5 +1,5 @@
 ---
-title: page_title
+title: "Patra — Full-Stack Demo"
 description: "A full-stack application built with Patra."
 lang: "en"
 canonical: "/"
@@ -13,11 +13,11 @@ rendering:
 ---
 
 <odin server>
-import "core:fmt"
 import "patra:rpc"
 import "patra:db"
 
 page_title: string = "Patra guestbook"
+
 
 // Creating Greetings table in db
 // db config is in patra.config.odin

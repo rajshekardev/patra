@@ -1,6 +1,6 @@
 # patra-lsp
 
-`patra-lsp` is an experimental language server for `.patra` files. It sends each block body to its language server as a separate virtual document, then maps diagnostics and language features back to the original file. Odin blocks receive a synthetic `package patra` line for OLS; it is not added to the `.patra` source.
+`patra-lsp` is an experimental language server for `.patra` files. It sends each block body to its language server as a separate virtual document, then maps diagnostics, symbols, formatting edits, code actions, and other language features back to the original file. Block tags and delimiters are excluded from virtual source. Odin blocks receive a synthetic `package patra` line for OLS; it is not added to the `.patra` source. Temporary backing files let OLS run Odin's checker on each block so unresolved names such as an unimported `fmt` are reported; these files are removed when the document closes.
 
 ## Supported blocks
 

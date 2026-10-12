@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdir, rmdir, unlink, writeFile } from "node:fs/promises";
+import { dirname, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from "vscode-jsonrpc/node.js";
 import {
   createConnection,
@@ -39,6 +42,33 @@ function languageId(language) {
   return language === "javascript" ? "javascript" : language;
 }
 
+function odinCheckerOptions() {
+  const base = initializeParams?.initializationOptions ?? {};
+  const rootPath = initializeParams?.rootPath
+    ?? (initializeParams?.rootUri ? fileURLToPath(initializeParams.rootUri) : process.cwd());
+  const checkerPath = [...virtualDocuments.values()]
+    .filter(virtual => virtual.region.language === "odin")
+    .map(virtual => relative(rootPath, fileURLToPath(virtual.region.uri)));
+  const profiles = Array.isArray(base.profiles) ? base.profiles : [];
+  const activeProfile = profiles.find(profile => profile.name === base.profile) ?? {};
+  return {
+    ...base,
+    enable_checker_workspace_diagnostics: true,
+    enable_checker_only_saved: false,
+    profile: "patra-lsp",
+    profiles: [
+      ...profiles.filter(profile => profile.name !== "patra-lsp"),
+      { ...activeProfile, name: "patra-lsp", checker_path: checkerPath },
+    ],
+  };
+}
+
+function updateOdinChecker(child) {
+  child.connection.sendNotification("workspace/didChangeConfiguration", {
+    settings: odinCheckerOptions(),
+  });
+}
+
 function makeVirtualUri(hostUri, region, index) {
   const url = new URL(hostUri);
   const slash = url.pathname.lastIndexOf("/");
@@ -48,6 +78,21 @@ function makeVirtualUri(hostUri, region, index) {
   url.search = "";
   url.hash = "";
   return url.toString();
+}
+
+async function removeVirtualFile(uri) {
+  let filePath;
+  try { filePath = fileURLToPath(uri); } catch { return; }
+  await unlink(filePath).catch(() => {});
+  const marker = filePath.lastIndexOf(`${sep}.patra-lsp${sep}`);
+  if (marker < 0) return;
+  const cleanupRoot = filePath.slice(0, marker + sep.length + ".patra-lsp".length);
+  let directory = dirname(filePath);
+  while (directory !== cleanupRoot) {
+    try { await rmdir(directory); } catch { break; }
+    directory = dirname(directory);
+  }
+  if (directory === cleanupRoot) await rmdir(directory).catch(() => {});
 }
 
 function mapPositionToHost(position, virtual) {
@@ -132,6 +177,34 @@ function sendDiagnostics(hostUri) {
   });
 }
 
+function mapWorkspaceEdit(edit) {
+  if (!edit || typeof edit !== "object") return edit;
+  const mapped = { ...edit };
+  if (mapped.changes && typeof mapped.changes === "object") {
+    const changes = {};
+    for (const [uri, edits] of Object.entries(mapped.changes)) {
+      const target = virtualDocuments.get(uri);
+      if (!target) continue;
+      changes[target.hostUri] = (changes[target.hostUri] ?? []).concat(
+        (edits ?? []).map(item => ({ ...item, range: mapRangeToHost(item.range, target) })).filter(item => item.range),
+      );
+    }
+    mapped.changes = changes;
+  }
+  if (Array.isArray(mapped.documentChanges)) {
+    mapped.documentChanges = mapped.documentChanges.flatMap(change => {
+      const target = virtualDocuments.get(change.textDocument?.uri);
+      if (!target) return [];
+      return [{
+        ...change,
+        textDocument: { ...change.textDocument, uri: target.hostUri },
+        edits: (change.edits ?? []).map(item => ({ ...item, range: mapRangeToHost(item.range, target) })).filter(item => item.range),
+      }];
+    });
+  }
+  return mapped;
+}
+
 function addChildHandlers(child) {
   child.connection.onNotification("textDocument/publishDiagnostics", params => {
     const virtual = virtualDocuments.get(params.uri);
@@ -175,12 +248,12 @@ async function getChild(language) {
     childConnection.listen();
     childConnection.sendRequest("initialize", {
       processId: initializeParams?.processId ?? null,
-      clientInfo: { name: "patra-lsp", version: "0.1.3" },
+      clientInfo: { name: "patra-lsp", version: "0.1.4" },
       rootUri: initializeParams?.rootUri ?? null,
       rootPath: initializeParams?.rootPath ?? null,
       workspaceFolders: initializeParams?.workspaceFolders ?? null,
       capabilities: initializeParams?.capabilities ?? {},
-      initializationOptions: initializeParams?.initializationOptions ?? null,
+      initializationOptions: key === "odin" ? odinCheckerOptions() : initializeParams?.initializationOptions ?? null,
       trace: "off",
     }).then(() => {
       childConnection.sendNotification("initialized", {});
@@ -217,12 +290,15 @@ async function closeVirtual(state, region) {
   virtualDocuments.delete(region.uri);
   state.diagnostics.delete(region.uri);
   const childPromise = children.get(serverKey(region.language));
-  if (!childPromise) return;
-  try {
-    const child = await childPromise;
-    child.connection.sendNotification("textDocument/didClose", { textDocument: { uri: region.uri } });
-    child.open.delete(region.uri);
-  } catch { }
+  if (childPromise) {
+    try {
+      const child = await childPromise;
+      child.connection.sendNotification("textDocument/didClose", { textDocument: { uri: region.uri } });
+      child.open.delete(region.uri);
+      if (region.language === "odin") updateOdinChecker(child);
+    } catch { }
+  }
+  await removeVirtualFile(region.uri);
 }
 
 async function openVirtual(state, region) {
@@ -232,6 +308,9 @@ async function openVirtual(state, region) {
   virtualDocuments.set(region.uri, virtual);
   state.diagnostics.set(region.uri, []);
   try {
+    const filePath = fileURLToPath(region.uri);
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, document.getText());
     const child = await getChild(region.language);
     child.connection.sendNotification("textDocument/didOpen", {
       textDocument: {
@@ -242,8 +321,10 @@ async function openVirtual(state, region) {
       },
     });
     child.open.add(region.uri);
+    if (region.language === "odin") updateOdinChecker(child);
   } catch (error) {
     virtualDocuments.delete(region.uri);
+    await removeVirtualFile(region.uri);
     connection.console.warn(error.message);
   }
 }
@@ -287,7 +368,7 @@ connection.onInitialize(params => {
       documentFormattingProvider: true,
       documentRangeFormattingProvider: true,
     },
-    serverInfo: { name: "patra-lsp", version: "0.1.3" },
+    serverInfo: { name: "patra-lsp", version: "0.1.4" },
   };
 });
 
@@ -335,6 +416,11 @@ function regionAt(params) {
   const offset = state.document.offsetAt(position);
   const region = state.virtuals.find(item => offset >= item.start && offset <= item.end);
   return region ? { state, region, offset } : null;
+}
+
+function regionsForDocument(params) {
+  const state = states.get(params.textDocument?.uri);
+  return state ? { state, regions: state.virtuals } : null;
 }
 
 function findSharedSymbol(state, region, offset) {
@@ -401,7 +487,29 @@ const forwardedRequests = [
 for (const method of forwardedRequests) {
   connection.onRequest(method, async params => {
     const routed = regionAt(params);
-    if (!routed) return method === "textDocument/completion" ? { isIncomplete: false, items: [] } : null;
+    const documentWide = ["textDocument/documentSymbol", "textDocument/formatting"].includes(method);
+    const whole = documentWide ? regionsForDocument(params) : null;
+    if (!routed && !whole) return method === "textDocument/completion" ? { isIncomplete: false, items: [] } : null;
+
+    if (documentWide) {
+      const results = await Promise.all(whole.regions.map(async region => {
+        const virtual = virtualDocuments.get(region.uri);
+        const childPromise = children.get(serverKey(region.language));
+        if (!virtual || !childPromise) return [];
+        try {
+          const child = await childPromise;
+          const forwarded = structuredClone(params);
+          forwarded.textDocument.uri = region.uri;
+          const result = await child.connection.sendRequest(method, forwarded);
+          if (method === "textDocument/documentSymbol") return mapVirtualResult(result ?? [], virtual);
+          return (result ?? []).map(edit => {
+            const range = mapRangeToHost(edit.range, virtual);
+            return range ? { ...edit, range } : null;
+          }).filter(Boolean);
+        } catch { return []; }
+      }));
+      return results.flat();
+    }
 
     const symbol = findSharedSymbol(routed.state, routed.region, routed.offset);
     const rpcRoute = method === "textDocument/definition" ? findRpcRouteAt(routed.state, routed.region, routed.offset) : null;
@@ -434,8 +542,18 @@ for (const method of forwardedRequests) {
         forwarded.textDocument.uri = routed.region.uri;
         if (forwarded.position) forwarded.position = mapPositionToVirtual(forwarded.position, virtual);
         if (forwarded.range) forwarded.range = mapRangeToVirtual(forwarded.range, virtual);
+        if (method === "textDocument/codeAction" && forwarded.context?.diagnostics) {
+          forwarded.context.diagnostics = forwarded.context.diagnostics.map(diagnostic => ({
+            ...diagnostic,
+            range: mapRangeToVirtual(diagnostic.range, virtual),
+          }));
+        }
         result = await child.connection.sendRequest(method, forwarded);
-        result = mapVirtualResult(result, virtual);
+        if (method === "textDocument/rename" || method === "textDocument/codeAction") {
+          result = Array.isArray(result) ? result.map(item => ({ ...item, edit: mapWorkspaceEdit(item.edit) })) : mapWorkspaceEdit(result);
+        } else {
+          result = mapVirtualResult(result, virtual);
+        }
       } catch { }
     }
     if (method === "textDocument/completion" && visibleSymbols(routed.region, routed.state.symbols).length) {
@@ -447,12 +565,22 @@ for (const method of forwardedRequests) {
 }
 
 connection.onNotification("workspace/didChangeConfiguration", params => {
-  for (const childPromise of children.values()) {
-    childPromise.then(child => child.connection.sendNotification("workspace/didChangeConfiguration", params)).catch(() => {});
+  for (const [key, childPromise] of children) {
+    childPromise.then(child => {
+      if (key === "odin") {
+        child.connection.sendNotification("workspace/didChangeConfiguration", {
+          ...params,
+          settings: { ...(params.settings ?? {}), ...odinCheckerOptions() },
+        });
+      } else {
+        child.connection.sendNotification("workspace/didChangeConfiguration", params);
+      }
+    }).catch(() => {});
   }
 });
 
 connection.onShutdown(async () => {
+  await Promise.all([...states.values()].flatMap(state => state.virtuals.map(region => closeVirtual(state, region))));
   await Promise.all([...children.values()].map(async childPromise => {
     try {
       const child = await childPromise;
