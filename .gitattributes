@@ -1,0 +1,2 @@
+/patra export-ignore
+/scripts/install.sh text eol=lf

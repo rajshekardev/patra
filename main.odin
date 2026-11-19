@@ -1,11 +1,15 @@
 package main
 
+import "core:encoding/base64"
 import "core:fmt"
+import "core:mem"
 import "core:os"
 import "core:strings"
+import "core:unicode/utf16"
+import "core:unicode/utf8"
 
 CONFIG_PATH :: "run.patra"
-STARTER_CONFIG :: "help:\n    printf '%s\\n' 'patra help'\n"
+STARTER_CONFIG :: "help:\n    echo 'patra help'\n"
 
 Task :: struct {
 	name:     string,
@@ -235,19 +239,39 @@ resolve_task :: proc(root: []Task, path: []string) -> ^Task {
 }
 
 run_script :: proc(script: string) -> int {
+	command: []string
+	when ODIN_OS == .Windows {
+		// PowerShell expects UTF-16LE for -EncodedCommand.
+		source := strings.join({
+			"$ErrorActionPreference = 'Stop'",
+			script,
+			"if (-not $?) { if ($LASTEXITCODE) { exit $LASTEXITCODE }; exit 1 }",
+		}, "\n")
+		if !utf8.valid_string(source) {
+			fmt.eprintln("patra: task script is not valid UTF-8")
+			return 1
+		}
+		wide := make([]u16, len(source))
+		length := utf16.encode_string(wide, source)
+		encoded := base64.encode(mem.slice_to_bytes(wide[:length]))
+		command = {"powershell.exe", "-NoLogo", "-NoProfile", "-EncodedCommand", encoded}
+	} else {
+		command = {"/bin/sh", "-e", "-c", script}
+	}
+
 	process, start_err := os.process_start({
-		command = {"/bin/sh", "-e", "-c", script},
+		command = command,
 		stdin   = os.stdin,
 		stdout  = os.stdout,
 		stderr  = os.stderr,
 	})
 	if start_err != nil {
-		fmt.eprintf("patra: cannot start /bin/sh: %v\n", start_err)
+		fmt.eprintf("patra: cannot start %s: %v\n", command[0], start_err)
 		return 1
 	}
 	state, wait_err := os.process_wait(process)
 	if wait_err != nil {
-		fmt.eprintf("patra: cannot wait for /bin/sh: %v\n", wait_err)
+		fmt.eprintf("patra: cannot wait for %s: %v\n", command[0], wait_err)
 		return 1
 	}
 	return state.exit_code
