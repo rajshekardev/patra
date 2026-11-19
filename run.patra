@@ -1,0 +1,10 @@
+build:
+    build_dir=$(mktemp -d ./.patra-build.XXXXXX)
+    trap 'rm -rf -- "$build_dir"' EXIT
+    odin build main.odin -file -out:"$build_dir/patra"
+    mv -fT -- "$build_dir/patra" ./patra
+
+symlink:
+    test -x ./patra || { printf '%s\n' 'Run the build task before creating the symlink.' >&2; exit 1; }
+    mkdir -p "$HOME/.local/bin"
+    ln -sfT -- "$(pwd)/patra" "$HOME/.local/bin/patra"
