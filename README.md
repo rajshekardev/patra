@@ -2,6 +2,115 @@
 
 Patra is an Odin-based task runner. Define commands in a `run.patra` file and run them by name.
 
+## Demo
+
+From your project directory, run `patra setup` to generate `run.patra`, then run its starter task.
+
+```sh
+patra setup
+patra help
+```
+
+`patra help` prints `patra help`. Setup reports an error if the file already exists and preserves its contents. You can also create `run.patra` in a text editor. To try tasks and groups, replace the starter contents with this example.
+
+```text
+help:
+    echo 'patra help'
+
+dev:
+    echo 'Starting dev'
+    echo 'Dev is ready'
+
+build:
+    linux:
+        echo 'Building for Linux'
+    windows:
+        echo 'Building for Windows'
+    release:
+        package:
+            echo 'Packaging release'
+
+check.v1-fast_2:
+    echo 'Checking status: ready'
+```
+
+```sh
+patra dev                    # Runs both commands in order
+patra build linux            # Runs a task in a group
+patra build release package  # Runs a task in a nested group
+patra check.v1-fast_2        # Runs a task with punctuation in its name
+```
+
+### File format
+
+- Start each top-level header at the left margin. Write the name followed immediately by `:`. Names are case-sensitive and may contain ASCII letters, digits, underscores, hyphens, and periods.
+- Indent each body with spaces. The demo uses four spaces per level. Sibling headers must align and have unique names within their group. Blank lines can separate tasks.
+- Give each header either an indented shell script or a group of indented task headers. Each runnable task executes as one shell script, so its lines share variables and working-directory changes.
+- Write shell comments inside a script body. At the file level and inside groups, Patra expects task headers. A line that looks like a task header at the script’s base indentation is reserved for the file format.
+- Patra reads `run.patra` from your current directory and validates the entire file before running the selected task.
+
+### Invalid examples
+
+Each numbered example below is a separate invalid `run.patra` fragment. The numbered comment lines label the examples.
+
+```text
+# 1. Empty body
+dev:
+
+# 2. Missing colon
+dev
+    echo 'Starting dev'
+
+# 3. Invalid character in the name
+build linux:
+    echo 'Building for Linux'
+
+# 4. Command on the header line
+dev: echo 'Starting dev'
+
+# 5. Indented top-level header
+    dev:
+        echo 'Starting dev'
+
+# 6. A tab instead of spaces for indentation
+dev:
+	echo 'Starting dev'
+
+# 7. Misaligned sibling headers
+build:
+    linux:
+        echo 'Building for Linux'
+  windows:
+      echo 'Building for Windows'
+
+# 8. Duplicate names in the same group
+build:
+    linux:
+        echo 'First build'
+    linux:
+        echo 'Second build'
+
+# 9. A script and a subtask in the same body
+build:
+    echo 'Building'
+    linux:
+        echo 'Building for Linux'
+
+# 10. File-level comment
+# Build tasks
+dev:
+    echo 'Starting dev'
+```
+
+These commands also fail with the valid demo file above.
+
+```sh
+patra build        # A group requires a subtask
+patra build ios    # The group has no task named ios
+patra dev extra    # A runnable task has no subtasks
+patra Dev          # Names are case-sensitive
+```
+
 ## Downloads
 
 | Platform | Standalone executable | Installer |
