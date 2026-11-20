@@ -125,6 +125,8 @@ Extract the Linux installer archive and run `sh install.sh` from the extracted d
 
 For manual installation on Linux or macOS, rename the downloaded file to `patra`, run `chmod +x patra`, and place it in a directory on your PATH. On Windows, rename it to `patra.exe` and place it in a directory on your PATH. The release binaries are unsigned.
 
+Run `patra --update` to install the latest stable release from GitHub for your platform. Patra checks the download against GitHub's SHA-256 digest before replacing the executable you ran. Updating requires write access to its directory and uses `curl` on Linux and macOS or the system `curl.exe` on Windows. On Windows, if the running executable needs to be moved aside, Patra keeps it next to the updated executable with a `.patra-old` suffix.
+
 ## Usage
 
 `patra --help` lists built-in commands. `patra --version` prints the Patra version. From your project directory, run `patra --init` to create a starter `run.patra`, and use `patra <task> [subtask ...]` to run a task. Bare names such as `patra init` are task lookups.
@@ -148,4 +150,4 @@ Patra creates a new project directory containing only `config.json`. The configu
 
 ## Releases
 
-[GitHub Releases](https://github.com/rajshekardev/patra/releases) lists published versions and their downloads. The Distribution workflow builds and smoke-tests the executables. Push a version tag such as `v0.1.0` on a commit containing the workflow to publish a release.
+[GitHub Releases](https://github.com/rajshekardev/patra/releases) lists published versions and their downloads. Every build embeds `VERSION`. To publish a release, update `VERSION`, commit it, and push a matching Git tag. The Distribution workflow validates the tag, builds and smoke-tests the executables, and publishes them with the source archive.

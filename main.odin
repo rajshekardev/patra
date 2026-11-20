@@ -10,7 +10,7 @@ import "core:unicode/utf8"
 
 CONFIG_PATH :: "run.patra"
 STARTER_CONFIG :: "help:\n    echo 'patra help'\n"
-VERSION :: #config(PATRA_VERSION, "dev")
+VERSION :: #load("VERSION", string)
 HELP :: `patra - Odin-based task runner
 Usage: patra <task> [subtask ...]
 
@@ -19,6 +19,7 @@ Built-in commands
   --init      Create a starter run.patra
   --version   Show the Patra version
   --new       Create a project configuration
+  --update    Install the latest Patra release
 `
 
 Task :: struct {
@@ -88,14 +89,20 @@ run_builtin :: proc(path: []string) -> int {
 	case "--init":
 		return init_task_file()
 	case "--version":
-		fmt.println("patra", VERSION)
+		fmt.println("patra", patra_version())
 		return 0
 	case "--new":
 		return new_project()
+	case "--update":
+		return update_patra()
 	case:
 		fmt.eprintf("patra: unknown built-in command %q. See patra --help.\n", path[0])
 		return 2
 	}
+}
+
+patra_version :: proc() -> string {
+	return strings.trim_space(VERSION)
 }
 
 init_task_file :: proc() -> int {

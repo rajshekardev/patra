@@ -49,6 +49,20 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Validate version
+        id: version
+        run: |
+          version=$(cat VERSION)
+          if [[ ! $version =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "VERSION must be a stable tag such as v0.1.2" >&2
+            exit 1
+          fi
+          if [[ $GITHUB_REF_TYPE == tag && $GITHUB_REF_NAME != "$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION ($version)" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
       - name: Install Odin
         env:
           TOOLCHAIN: ${{ matrix.toolchain }}
@@ -82,44 +96,36 @@ jobs:
         run: |
           odin version
           mkdir -p dist
-          version=dev
-          if [[ $GITHUB_REF_TYPE == tag ]]; then
-            version=$GITHUB_REF_NAME
-          fi
-          version_define="-define:PATRA_VERSION=$version"
           case "$RUNNER_OS" in
             Linux)
-              odin build . "$version_define" -o:speed -extra-linker-flags:-static -out:"dist/$ASSET"
+              odin build . -o:speed -extra-linker-flags:-static -out:"dist/$ASSET"
               ;;
             macOS)
-              odin build . "$version_define" -o:speed -minimum-os-version:13.0 -out:"$RUNNER_TEMP/patra-arm64"
-              odin build . "$version_define" -o:speed -target:darwin_amd64 -minimum-os-version:13.0 \
+              odin build . -o:speed -minimum-os-version:13.0 -out:"$RUNNER_TEMP/patra-arm64"
+              odin build . -o:speed -target:darwin_amd64 -minimum-os-version:13.0 \
                 -extra-linker-flags:'-arch x86_64' -out:"$RUNNER_TEMP/patra-amd64"
               lipo -create "$RUNNER_TEMP/patra-arm64" "$RUNNER_TEMP/patra-amd64" -output "dist/$ASSET"
               lipo "dist/$ASSET" -verify_arch arm64 x86_64
               ;;
             Windows)
-              odin build . "$version_define" -o:speed -out:"dist/$ASSET"
+              odin build . -o:speed -out:"dist/$ASSET"
               ;;
           esac
 
       - name: Smoke-test the executable
         env:
           ASSET: ${{ matrix.asset }}
+          PATRA_VERSION: ${{ steps.version.outputs.version }}
         run: |
           binary="$PWD/dist/$ASSET"
           cd "$(mktemp -d)"
           banner=$("$binary")
           [[ $banner == *'Odin-based task runner'* ]]
           [[ $banner == "$("$binary" --help)" ]]
-          for builtin in --help --init --version --new; do
+          for builtin in --help --init --version --new --update; do
             [[ $banner == *"$builtin"* ]]
           done
-          version=dev
-          if [[ $GITHUB_REF_TYPE == tag ]]; then
-            version=$GITHUB_REF_NAME
-          fi
-          test "$("$binary" --version | tr -d '\r')" = "patra $version"
+          test "$("$binary" --version | tr -d '\r')" = "patra $PATRA_VERSION"
           expect_usage_error() {
             local status=0
             "$binary" "$@" || status=$?
@@ -127,11 +133,12 @@ jobs:
           }
           expect_usage_error --unknown
           expect_usage_error --init extra
+          expect_usage_error --update extra
           test ! -e run.patra
           "$binary" --init
           help=$("$binary" help | tr -d '\r')
           test "$help" = 'patra help'
-          for task in setup init version new; do
+          for task in setup init version new update; do
             printf '\n%s:\n    echo "%s task"\n' "$task" "$task" >> run.patra
             test "$("$binary" "$task" | tr -d '\r')" = "$task task"
           done
@@ -152,6 +159,12 @@ jobs:
         env:
           ASSET: ${{ matrix.asset }}
         run: python3 scripts/test_wizard.py "dist/$ASSET"
+
+      - name: Test the updater
+        if: runner.os != 'Windows'
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: python3 scripts/test_update.py "dist/$ASSET"
 
       - name: Package and test the Linux installer
         if: runner.os == 'Linux'
