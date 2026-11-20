@@ -30,7 +30,11 @@ def run_wizard(binary, directory, actions, expected_status):
 
                 status = process.wait(timeout=5)
                 assert status == expected_status, status
-                assert termios.tcgetattr(slave) == original_mode
+                if sys.platform == "darwin":
+                    # Restoring canonical mode sets PENDIN until the queued input is handled.
+                    termios.tcflush(slave, termios.TCIFLUSH)
+                restored_mode = termios.tcgetattr(slave)
+                assert restored_mode == original_mode, (original_mode, restored_mode)
             finally:
                 if process.poll() is None:
                     process.kill()
