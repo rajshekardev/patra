@@ -82,19 +82,24 @@ jobs:
         run: |
           odin version
           mkdir -p dist
+          version=dev
+          if [[ $GITHUB_REF_TYPE == tag ]]; then
+            version=$GITHUB_REF_NAME
+          fi
+          version_define="-define:PATRA_VERSION=$version"
           case "$RUNNER_OS" in
             Linux)
-              odin build main.odin -file -o:speed -extra-linker-flags:-static -out:"dist/$ASSET"
+              odin build . "$version_define" -o:speed -extra-linker-flags:-static -out:"dist/$ASSET"
               ;;
             macOS)
-              odin build main.odin -file -o:speed -minimum-os-version:13.0 -out:"$RUNNER_TEMP/patra-arm64"
-              odin build main.odin -file -o:speed -target:darwin_amd64 -minimum-os-version:13.0 \
+              odin build . "$version_define" -o:speed -minimum-os-version:13.0 -out:"$RUNNER_TEMP/patra-arm64"
+              odin build . "$version_define" -o:speed -target:darwin_amd64 -minimum-os-version:13.0 \
                 -extra-linker-flags:'-arch x86_64' -out:"$RUNNER_TEMP/patra-amd64"
               lipo -create "$RUNNER_TEMP/patra-arm64" "$RUNNER_TEMP/patra-amd64" -output "dist/$ASSET"
               lipo "dist/$ASSET" -verify_arch arm64 x86_64
               ;;
             Windows)
-              odin build main.odin -file -o:speed -out:"dist/$ASSET"
+              odin build . "$version_define" -o:speed -out:"dist/$ASSET"
               ;;
           esac
 
@@ -106,13 +111,47 @@ jobs:
           cd "$(mktemp -d)"
           banner=$("$binary")
           [[ $banner == *'Odin-based task runner'* ]]
-          "$binary" setup
+          [[ $banner == "$("$binary" --help)" ]]
+          for builtin in --help --init --version --new; do
+            [[ $banner == *"$builtin"* ]]
+          done
+          version=dev
+          if [[ $GITHUB_REF_TYPE == tag ]]; then
+            version=$GITHUB_REF_NAME
+          fi
+          test "$("$binary" --version | tr -d '\r')" = "patra $version"
+          expect_usage_error() {
+            local status=0
+            "$binary" "$@" || status=$?
+            test "$status" -eq 2
+          }
+          expect_usage_error --unknown
+          expect_usage_error --init extra
+          test ! -e run.patra
+          "$binary" --init
           help=$("$binary" help | tr -d '\r')
           test "$help" = 'patra help'
+          for task in setup init version new; do
+            printf '\n%s:\n    echo "%s task"\n' "$task" "$task" >> run.patra
+            test "$("$binary" "$task" | tr -d '\r')" = "$task task"
+          done
+          printf '\ngroup:\n    --help:\n        echo "nested task"\n' >> run.patra
+          test "$("$binary" group --help | tr -d '\r')" = 'nested task'
+          cp run.patra original.patra
+          status=0
+          "$binary" --init || status=$?
+          test "$status" -eq 1
+          cmp run.patra original.patra
           printf '\nfail:\n    exit 7\n' >> run.patra
           status=0
           "$binary" fail || status=$?
           test "$status" -eq 7
+
+      - name: Test the project wizard in a terminal
+        if: runner.os != 'Windows'
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: python3 scripts/test_wizard.py "dist/$ASSET"
 
       - name: Package and test the Linux installer
         if: runner.os == 'Linux'

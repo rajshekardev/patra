@@ -1,7 +1,7 @@
 build:
     build_dir=$(mktemp -d ./.patra-build.XXXXXX)
     trap 'rm -rf -- "$build_dir"' EXIT
-    odin build main.odin -file -out:"$build_dir/patra"
+    odin build . -out:"$build_dir/patra"
     mv -fT -- "$build_dir/patra" ./patra
 
 symlink:

@@ -4,14 +4,14 @@ Patra is an Odin-based task runner. Define commands in a `run.patra` file and ru
 
 ## Demo
 
-From your project directory, run `patra setup` to generate `run.patra`, then run its starter task.
+From your project directory, run `patra --init` to generate `run.patra`, then run its starter task.
 
 ```sh
-patra setup
+patra --init
 patra help
 ```
 
-`patra help` prints `patra help`. Setup reports an error if the file already exists and preserves its contents. You can also create `run.patra` in a text editor. To try tasks and groups, replace the starter contents with this example.
+`patra help` runs the starter task and prints `patra help`. Initialization reports an error if the file already exists and preserves its contents. You can also create `run.patra` in a text editor. To try tasks and groups, replace the starter contents with this example.
 
 ```text
 help:
@@ -43,7 +43,7 @@ patra check.v1-fast_2        # Runs a task with punctuation in its name
 
 ### File format
 
-- Start each top-level header at the left margin. Write the name followed immediately by `:`. Names are case-sensitive and may contain ASCII letters, digits, underscores, hyphens, and periods.
+- Start each top-level header at the left margin. Write the name followed immediately by `:`. Names are case-sensitive and may contain ASCII letters, digits, underscores, hyphens, and periods. The `--` prefix is reserved for built-ins at the top level.
 - Indent each body with spaces. The demo uses four spaces per level. Sibling headers must align and have unique names within their group. Blank lines can separate tasks.
 - Give each header either an indented shell script or a group of indented task headers. Each runnable task executes as one shell script, so its lines share variables and working-directory changes.
 - Write shell comments inside a script body. At the file level and inside groups, Patra expects task headers. A line that looks like a task header at the script’s base indentation is reserved for the file format.
@@ -127,14 +127,24 @@ For manual installation on Linux or macOS, rename the downloaded file to `patra`
 
 ## Usage
 
-Run these commands from your project directory.
+`patra --help` lists built-in commands. `patra --version` prints the Patra version. From your project directory, run `patra --init` to create a starter `run.patra`, and use `patra <task> [subtask ...]` to run a task. Bare names such as `patra init` are task lookups.
 
-```sh
-patra setup
-patra help
+Task scripts use `/bin/sh` on Linux and macOS and Windows PowerShell on Windows. When a Windows task calls a native executable and needs to stop after a failure before running the next command, check `$LASTEXITCODE` in the task.
+
+### New projects
+
+Run `patra --new` in an interactive terminal and enter a project name. Use Up and Down to highlight a platform, Space to toggle it, and Enter to confirm at least one selection. Use Ctrl+C to cancel.
+
+The available platforms are Android, iOS, Windows, Linux, macOS, Server, and Website. Server is for an Odin web server. Website is for an Odin frontend using the Patra UI library.
+
+Patra creates a new project directory containing only `config.json`. The configuration stores the project name and the selected platforms in menu order.
+
+```json
+{
+  "name": "My Project",
+  "platforms": ["linux", "website"]
+}
 ```
-
-`patra setup` creates a starter `run.patra`. Use `patra <task> [subtask ...]` to run a task. Task scripts use `/bin/sh` on Linux and macOS and Windows PowerShell on Windows. When a Windows task calls a native executable and needs to stop after a failure before running the next command, check `$LASTEXITCODE` in the task.
 
 ## Releases
 

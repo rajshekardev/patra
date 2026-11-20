@@ -10,6 +10,16 @@ import "core:unicode/utf8"
 
 CONFIG_PATH :: "run.patra"
 STARTER_CONFIG :: "help:\n    echo 'patra help'\n"
+VERSION :: #config(PATRA_VERSION, "dev")
+HELP :: `patra - Odin-based task runner
+Usage: patra <task> [subtask ...]
+
+Built-in commands
+  --help      Show this help
+  --init      Create a starter run.patra
+  --version   Show the Patra version
+  --new       Create a project configuration
+`
 
 Task :: struct {
 	name:     string,
@@ -28,13 +38,12 @@ main :: proc() {
 
 run :: proc(path: []string) -> int {
 	if len(path) == 0 {
-		fmt.println("patra - Odin-based task runner")
-		fmt.println("Usage: patra <task> [subtask ...]")
-		fmt.println("       patra setup")
+		fmt.print(HELP)
 		return 0
 	}
-	if len(path) == 1 && path[0] == "setup" {
-		return setup()
+
+	if strings.has_prefix(path[0], "--") {
+		return run_builtin(path)
 	}
 
 	context.allocator = context.temp_allocator
@@ -67,29 +76,57 @@ run :: proc(path: []string) -> int {
 	return run_script(task.script)
 }
 
-setup :: proc() -> int {
-	file, err := os.open(CONFIG_PATH, {.Write, .Create, .Excl}, os.Permissions_Default_File)
-	if err != nil {
-		fmt.eprintf("patra: cannot create %s: %s\n", CONFIG_PATH, os.error_string(err))
+run_builtin :: proc(path: []string) -> int {
+	if len(path) != 1 {
+		fmt.eprintln("patra: built-in commands take no arguments. See patra --help.")
+		return 2
+	}
+	switch path[0] {
+	case "--help":
+		fmt.print(HELP)
+		return 0
+	case "--init":
+		return init_task_file()
+	case "--version":
+		fmt.println("patra", VERSION)
+		return 0
+	case "--new":
+		return new_project()
+	case:
+		fmt.eprintf("patra: unknown built-in command %q. See patra --help.\n", path[0])
+		return 2
+	}
+}
+
+init_task_file :: proc() -> int {
+	if !write_new_file(CONFIG_PATH, STARTER_CONFIG) {
 		return 1
 	}
+	fmt.println("Created", CONFIG_PATH)
+	return 0
+}
 
-	written, write_err := os.write_string(file, STARTER_CONFIG)
+write_new_file :: proc(path, contents: string) -> bool {
+	file, err := os.open(path, {.Write, .Create, .Excl}, os.Permissions_Default_File)
+	if err != nil {
+		fmt.eprintf("patra: cannot create %s: %s\n", path, os.error_string(err))
+		return false
+	}
+
+	written, write_err := os.write_string(file, contents)
 	close_err := os.close(file)
-	if write_err == nil && written != len(STARTER_CONFIG) {
+	if write_err == nil && written != len(contents) {
 		write_err = .Short_Write
 	}
 	if write_err == nil {
 		write_err = close_err
 	}
 	if write_err != nil {
-		os.remove(CONFIG_PATH)
-		fmt.eprintf("patra: cannot write %s: %s\n", CONFIG_PATH, os.error_string(write_err))
-		return 1
+		os.remove(path)
+		fmt.eprintf("patra: cannot write %s: %s\n", path, os.error_string(write_err))
+		return false
 	}
-
-	fmt.println("Created", CONFIG_PATH)
-	return 0
+	return true
 }
 
 parse_tasks :: proc(parser: ^Parser, indent: int) -> ([]Task, bool) {
